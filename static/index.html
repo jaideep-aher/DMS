@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Monitoring System</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<header>
+  <div class="dot" id="status-dot"></div>
+  <h1>Driver Monitoring System</h1>
+</header>
+
+<div class="main-layout">
+  <!-- Camera + canvas overlay -->
+  <div class="video-wrapper">
+    <video id="input-video" playsinline></video>
+    <canvas id="output" width="640" height="480"></canvas>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <!-- Controls -->
+    <div class="card">
+      <h2>Controls</h2>
+      <button id="start-btn">Start Monitoring</button>
+      <div class="status-row" style="margin-top:10px;">
+        WebSocket: <span id="ws-status">—</span>
+        &nbsp;|&nbsp;
+        Session: <span id="session-id" style="font-size:.78rem;">none</span>
+      </div>
+    </div>
+
+    <!-- Live metrics -->
+    <div class="card">
+      <h2>Live Metrics</h2>
+      <div class="metric-grid">
+        <div class="metric-item">
+          <div class="label">EAR (avg)</div>
+          <div class="value" id="m-ear">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="label">MAR</div>
+          <div class="value" id="m-mar">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="label">Yaw</div>
+          <div class="value" id="m-yaw">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="label">Pitch</div>
+          <div class="value" id="m-pitch">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="label">Roll</div>
+          <div class="value" id="m-roll">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="label">EAR Left / Right</div>
+          <div class="value" id="m-ear-lr" style="font-size:1rem;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="card">
+      <h2>Alerts</h2>
+      <div class="alert-list" id="alert-list">
+        <span style="color:var(--muted);font-size:.82rem;">No alerts</span>
+      </div>
+    </div>
+
+    <!-- Session summary (from backend) -->
+    <div class="card">
+      <h2>Session Summary (backend)</h2>
+      <div id="summary" style="font-size:.82rem;color:var(--muted);line-height:1.7;">
+        Start monitoring to see session data.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+<!-- App scripts -->
+<script src="/static/js/websocket.js"></script>
+<script src="/static/js/vision.js"></script>
+
+<script>
+  // -------------------------------------------------------------------------
+  // UI wiring
+  // -------------------------------------------------------------------------
+  const startBtn   = document.getElementById('start-btn');
+  const statusDot  = document.getElementById('status-dot');
+  const wsStatusEl = document.getElementById('ws-status');
+  const sessionEl  = document.getElementById('session-id');
+  const alertList  = document.getElementById('alert-list');
+  const summaryEl  = document.getElementById('summary');
+
+  const metricEls = {
+    ear:   document.getElementById('m-ear'),
+    mar:   document.getElementById('m-mar'),
+    yaw:   document.getElementById('m-yaw'),
+    pitch: document.getElementById('m-pitch'),
+    roll:  document.getElementById('m-roll'),
+    earLR: document.getElementById('m-ear-lr'),
+  };
+
+  let wsClient = null;
+  let running  = false;
+
+  // -------------------------------------------------------------------------
+  // Update HUD
+  // -------------------------------------------------------------------------
+  function setMetricEl(el, value, warn, alert) {
+    el.textContent = value;
+    el.className = 'value' + (alert ? ' alert' : warn ? ' warn' : '');
+  }
+
+  function updateUI(metrics) {
+    const drowsy     = metrics.ear < 0.25;
+    const warnDrowsy = metrics.ear < 0.28;
+    const yawning    = metrics.mar > 0.6;
+    const warnYawn   = metrics.mar > 0.45;
+    const distYaw    = Math.abs(metrics.yaw)   > 20;
+    const distPitch  = Math.abs(metrics.pitch) > 20;
+    const distRoll   = Math.abs(metrics.roll)  > 30;
+
+    setMetricEl(metricEls.ear,   metrics.ear.toFixed(3),   warnDrowsy, drowsy);
+    setMetricEl(metricEls.mar,   metrics.mar.toFixed(3),   warnYawn,   yawning);
+    setMetricEl(metricEls.yaw,   metrics.yaw.toFixed(1)+'°', false, distYaw);
+    setMetricEl(metricEls.pitch, metrics.pitch.toFixed(1)+'°', false, distPitch);
+    setMetricEl(metricEls.roll,  metrics.roll.toFixed(1)+'°', false, distRoll);
+    metricEls.earLR.textContent =
+      metrics.ear_left.toFixed(3) + ' / ' + metrics.ear_right.toFixed(3);
+
+    // Status dot
+    statusDot.className = 'dot';
+    if (drowsy || distYaw || distPitch) {
+      statusDot.classList.add('alert');
+    } else if (warnDrowsy || warnYawn) {
+      statusDot.classList.add('warn');
+    } else {
+      statusDot.classList.add('active');
+    }
+
+    // Alerts panel
+    const alerts = [];
+    if (drowsy)    alerts.push({ text: 'DROWSINESS — Eyes closing', warn: false });
+    else if (warnDrowsy) alerts.push({ text: 'Warning — Low EAR', warn: true });
+    if (yawning)   alerts.push({ text: 'YAWN / Mouth open wide', warn: true });
+    if (distYaw)   alerts.push({ text: 'DISTRACTION — Head yaw > 20°', warn: false });
+    if (distPitch) alerts.push({ text: 'DISTRACTION — Head pitch > 20°', warn: false });
+    if (distRoll)  alerts.push({ text: 'Head tilted > 30°', warn: true });
+
+    alertList.innerHTML = alerts.length === 0
+      ? '<span style="color:var(--muted);font-size:.82rem;">No alerts</span>'
+      : alerts.map(a =>
+          `<div class="alert-tag${a.warn ? ' warn' : ''}">${a.text}</div>`
+        ).join('');
+  }
+
+  // -------------------------------------------------------------------------
+  // Backend summary polling
+  // -------------------------------------------------------------------------
+  function pollSummary(sessionId) {
+    fetch(`/api/session/${sessionId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) return;
+        summaryEl.innerHTML = `
+          Frames: <b>${d.frame_count}</b> &nbsp;|&nbsp;
+          Duration: <b>${d.duration_seconds}s</b><br>
+          Avg EAR: <b>${d.avg_ear ?? '—'}</b> &nbsp;|&nbsp;
+          Avg MAR: <b>${d.avg_mar ?? '—'}</b><br>
+          Avg Yaw: <b>${d.avg_yaw ?? '—'}°</b> &nbsp;|&nbsp;
+          Avg Pitch: <b>${d.avg_pitch ?? '—'}°</b><br>
+          Drowsy frames: <b style="color:var(--red)">${d.drowsy_frames}</b> &nbsp;|&nbsp;
+          Yawn frames: <b style="color:var(--yellow)">${d.yawn_frames}</b><br>
+          Distracted frames: <b style="color:var(--red)">${d.distracted_frames}</b>
+        `;
+      })
+      .catch(() => {});
+  }
+
+  // -------------------------------------------------------------------------
+  // Start / Stop
+  // -------------------------------------------------------------------------
+  startBtn.addEventListener('click', () => {
+    if (!running) {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+  });
+
+  let summaryPoller = null;
+
+  function startMonitoring() {
+    running = true;
+    startBtn.textContent = 'Stop Monitoring';
+    startBtn.classList.add('stop');
+
+    // WebSocket
+    wsClient = new MetricsWSClient((ack) => {
+      wsStatusEl.textContent = 'Connected';
+      wsStatusEl.className = 'ok';
+      if (ack.session_id && !sessionEl.textContent.startsWith(ack.session_id.slice(0,8))) {
+        sessionEl.textContent = ack.session_id.slice(0, 8) + '…';
+      }
+    });
+
+    wsClient.connect();
+
+    // Override onmessage to also capture session_id for polling
+    const origConnect = wsClient.ws; // will be set after connect()
+    // Use a small delay to let ws connect, then hook session polling
+    const sessionPollStart = setInterval(() => {
+      if (wsClient.sessionId) {
+        clearInterval(sessionPollStart);
+        sessionEl.textContent = wsClient.sessionId.slice(0,8) + '…';
+        summaryPoller = setInterval(() => pollSummary(wsClient.sessionId), 3000);
+      }
+    }, 300);
+
+    wsStatusEl.textContent = 'Connecting…';
+    wsStatusEl.className   = '';
+
+    // Vision pipeline
+    const videoEl  = document.getElementById('input-video');
+    const canvasEl = document.getElementById('output');
+
+    startVisionPipeline(videoEl, canvasEl, (metrics) => {
+      updateUI(metrics);
+      if (wsClient) wsClient.push({
+        timestamp: metrics.timestamp,
+        ear:       metrics.ear,
+        ear_left:  metrics.ear_left,
+        ear_right: metrics.ear_right,
+        mar:       metrics.mar,
+        pitch:     metrics.pitch,
+        yaw:       metrics.yaw,
+        roll:      metrics.roll,
+      });
+    });
+  }
+
+  function stopMonitoring() {
+    running = false;
+    startBtn.textContent = 'Start Monitoring';
+    startBtn.classList.remove('stop');
+    statusDot.className = 'dot';
+
+    if (wsClient) { wsClient.close(); wsClient = null; }
+    clearInterval(summaryPoller);
+
+    wsStatusEl.textContent = 'Disconnected';
+    wsStatusEl.className   = 'error';
+  }
+</script>
+</body>
+</html>
