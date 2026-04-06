@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -11,12 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from server.alert_engine import AlertEngine
+from server.alert_manager import AlertManager
 from server.buffer import RollingSignalBuffer
-from server.models import MetricBatch, StatusResponse
+from server.models import AlertsResponse, DrivingContext, MetricBatch, StatusResponse
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Driver Monitoring System", version="0.1.0")
+app = FastAPI(title="Driver Monitoring System", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,8 +29,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# session_id -> rolling buffer
 _sessions: dict[str, RollingSignalBuffer] = {}
+alert_engine = AlertEngine()
+alert_manager = AlertManager()
 
 
 @app.get("/api/status")
@@ -41,13 +45,55 @@ async def api_status(session_id: Optional[str] = None) -> StatusResponse:
     return StatusResponse(sessions=summaries)
 
 
+@app.get("/api/alerts")
+async def api_alerts(session_id: str) -> AlertsResponse:
+    if not session_id or session_id not in _sessions:
+        return AlertsResponse(session_id=session_id or "", alerts=[])
+    return AlertsResponse(session_id=session_id, alerts=alert_manager.get_alerts(session_id))
+
+
+async def _run_alert_pipeline(
+    websocket: WebSocket,
+    session_id: str,
+    buffer: RollingSignalBuffer,
+    context: Optional[DrivingContext],
+) -> None:
+    try:
+        result = await alert_engine.evaluate(session_id, buffer, context)
+        if not result:
+            return
+        severity = result.get("severity", "none")
+        if severity == "none":
+            return
+        rec = alert_manager.commit_alert(
+            session_id,
+            severity,
+            str(result.get("alert_text", "")),
+            result.get("reasoning"),
+        )
+        if rec is None:
+            return
+        await websocket.send_json(
+            {
+                "type": "alert",
+                "v": 1,
+                "severity": rec.severity,
+                "alert_text": rec.alert_text,
+                "timestamp": rec.timestamp,
+                "reasoning": rec.reasoning,
+            }
+        )
+    except Exception:
+        pass
+
+
 @app.websocket("/ws/metrics")
 async def metrics_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
     sid = str(uuid.uuid4())
     _sessions[sid] = RollingSignalBuffer(maxlen=90)
     try:
-        await websocket.send_json({"type": "hello", "session_id": sid})
+        await websocket.send_json({"type": "hello", "v": 1, "session_id": sid})
         while True:
             try:
                 msg = await websocket.receive()
@@ -68,8 +114,13 @@ async def metrics_websocket(websocket: WebSocket) -> None:
                 break
             if batch.samples:
                 buf.extend(batch.samples)
+                asyncio.create_task(
+                    _run_alert_pipeline(websocket, sid, buf, batch.context)
+                )
     finally:
         _sessions.pop(sid, None)
+        alert_manager.drop_session(sid)
+        alert_engine.drop_session(sid)
 
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

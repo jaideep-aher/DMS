@@ -7,21 +7,46 @@
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body>
-    <header class="header">
-      <h1>Driver Monitoring System</h1>
-      <p class="sub" id="status">Starting…</p>
-    </header>
-    <main class="main">
-      <div class="video-wrap">
-        <video id="video" playsinline></video>
-        <canvas id="canvas"></canvas>
+    <div id="alert-banner" class="alert-banner sev-none" role="status" aria-live="polite">
+      <span id="alert-banner-text">Starting…</span>
+    </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Alert history">
+        <h2 class="sidebar-title">Alerts</h2>
+        <ul id="alert-history" class="alert-history"></ul>
+      </aside>
+      <div class="app-main">
+        <header class="header">
+          <h1>Driver Monitoring System</h1>
+          <p class="sub" id="status">Starting…</p>
+        </header>
+        <section class="controls" aria-label="Driving context simulation">
+          <div class="ctrl-row">
+            <label for="speed-slider">Speed <span id="speed-value">0</span> mph</label>
+            <input type="range" id="speed-slider" min="0" max="120" value="35" />
+          </div>
+          <div class="ctrl-meta">
+            <span>Road: <strong id="road-type">city</strong></span>
+            <span>Session: <strong id="session-timer">0</strong> min</span>
+            <span>Local: <strong id="local-clock">—</strong></span>
+            <span><strong id="daypart">—</strong></span>
+          </div>
+        </section>
+        <main class="main">
+          <div class="video-wrap">
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+          </div>
+          <p class="hint">
+            Allow camera access. Face mesh and metrics run in your browser; batches include driving context and use
+            <code>type: metrics_batch</code>. Server may reply with <code>type: alert</code>.
+          </p>
+        </main>
       </div>
-      <p class="hint">
-        Allow camera access. Face mesh, EAR, MAR, and head pose run in your browser; summaries are sent to the
-        server over WebSocket every 200ms.
-      </p>
-    </main>
+    </div>
+    <script src="/js/context.js" defer></script>
     <script src="/js/websocket.js" defer></script>
+    <script src="/js/alerts_ui.js" defer></script>
     <script src="/js/vision.js" defer></script>
   </body>
 </html>

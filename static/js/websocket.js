@@ -14,7 +14,16 @@
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (queue.length === 0) return;
     const samples = queue.splice(0, queue.length);
-    ws.send(JSON.stringify({ session_id: sessionId, samples }));
+    const ctx =
+      typeof window.getDmsDrivingContext === "function" ? window.getDmsDrivingContext() : null;
+    const payload = {
+      type: "metrics_batch",
+      v: 1,
+      session_id: sessionId,
+      samples,
+    };
+    if (ctx) payload.context = ctx;
+    ws.send(JSON.stringify(payload));
   }
 
   function connect() {
@@ -28,6 +37,7 @@
     ws.addEventListener("message", (ev) => {
       try {
         const msg = JSON.parse(ev.data);
+        window.dispatchEvent(new CustomEvent("dms-ws", { detail: msg }));
         if (msg.type === "hello" && msg.session_id) {
           sessionId = msg.session_id;
           window.__DMS_SESSION_ID__ = sessionId;
