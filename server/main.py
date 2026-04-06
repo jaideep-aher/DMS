@@ -1,105 +1,85 @@
-import os
+from __future__ import annotations
+
 import json
+import os
 import uuid
-import logging
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from pydantic import ValidationError
 
-from server.models import MetricBatch, MetricFrame, StatusResponse
-from server.buffer import SessionStore
+from server.buffer import RollingSignalBuffer
+from server.models import MetricBatch, StatusResponse
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Driver Monitoring System")
-store = SessionStore()
+app = FastAPI(title="Driver Monitoring System", version="0.1.0")
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_DIR = BASE_DIR / "static"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Serve static files
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-
-@app.get("/")
-async def root():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+# session_id -> rolling buffer
+_sessions: dict[str, RollingSignalBuffer] = {}
 
 
-@app.get("/api/status", response_model=StatusResponse)
-async def get_status():
-    return StatusResponse(
-        active_sessions=store.active_count,
-        sessions=store.all_summaries(),
-    )
-
-
-@app.get("/api/session/{session_id}")
-async def get_session(session_id: str):
-    buf = store._sessions.get(session_id)
-    if buf is None:
-        return JSONResponse({"error": "session not found"}, status_code=404)
-    return buf.summarize(session_id)
+@app.get("/api/status")
+async def api_status(session_id: Optional[str] = None) -> StatusResponse:
+    if session_id:
+        buf = _sessions.get(session_id)
+        if buf is None:
+            return StatusResponse(sessions=[])
+        return StatusResponse(sessions=[buf.summary(session_id)])
+    summaries = [buf.summary(sid) for sid, buf in _sessions.items()]
+    return StatusResponse(sessions=summaries)
 
 
 @app.websocket("/ws/metrics")
-async def ws_metrics(websocket: WebSocket):
+async def metrics_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
-    session_id = str(uuid.uuid4())
-    buf = store.get_or_create(session_id)
-    logger.info(f"WS connected: session={session_id}")
-
-    # Send session id to client
-    await websocket.send_json({"type": "connected", "session_id": session_id})
-
+    sid = str(uuid.uuid4())
+    _sessions[sid] = RollingSignalBuffer(maxlen=90)
     try:
+        await websocket.send_json({"type": "hello", "session_id": sid})
         while True:
-            raw = await websocket.receive_text()
             try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                await websocket.send_json({"type": "error", "msg": "invalid json"})
+                msg = await websocket.receive()
+            except WebSocketDisconnect:
+                break
+            if msg.get("type") != "websocket.receive":
                 continue
+            text = msg.get("text")
+            if not text:
+                continue
+            try:
+                raw = json.loads(text)
+                batch = MetricBatch.model_validate(raw)
+            except (json.JSONDecodeError, ValidationError):
+                continue
+            buf = _sessions.get(sid)
+            if buf is None:
+                break
+            if batch.samples:
+                buf.extend(batch.samples)
+    finally:
+        _sessions.pop(sid, None)
 
-            # Accept either a single frame dict or a batch {frames: [...]}
-            if isinstance(data, list):
-                frames = data
-            elif "frames" in data:
-                frames = data["frames"]
-            else:
-                frames = [data]
 
-            parsed = []
-            for f in frames:
-                try:
-                    parsed.append(MetricFrame(**f))
-                except Exception as e:
-                    logger.warning(f"Bad frame: {e}")
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
-            if parsed:
-                buf.add_batch(parsed)
 
-            summary = buf.summarize(session_id)
-            await websocket.send_json({
-                "type": "ack",
-                "session_id": session_id,
-                "frame_count": summary.frame_count,
-                "drowsy_frames": summary.drowsy_frames,
-                "yawn_frames": summary.yawn_frames,
-                "distracted_frames": summary.distracted_frames,
-                "avg_ear": summary.avg_ear,
-                "avg_mar": summary.avg_mar,
-            })
-
-    except WebSocketDisconnect:
-        logger.info(f"WS disconnected: session={session_id}")
-        store.remove(session_id)
+def _port() -> int:
+    return int(os.environ.get("PORT", "8000"))
 
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("server.main:app", host="0.0.0.0", port=port, reload=False)
+
+    uvicorn.run("server.main:app", host="0.0.0.0", port=_port(), reload=False)

@@ -52,6 +52,9 @@ yarn-error.log*
 dist/
 .DS_Store
 
+# Local tooling
+.claude/
+
 # IDE
 .idea/
 .vscode/

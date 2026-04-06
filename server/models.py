@@ -1,36 +1,36 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
-class MetricFrame(BaseModel):
-    timestamp: float
-    ear: float          # Eye Aspect Ratio (average both eyes)
-    ear_left: float
-    ear_right: float
-    mar: float          # Mouth Aspect Ratio
-    pitch: float        # head pose degrees
-    yaw: float
-    roll: float
+class MetricSample(BaseModel):
+    ear_left: float = Field(..., description="Left eye aspect ratio")
+    ear_right: float = Field(..., description="Right eye aspect ratio")
+    mar: float = Field(..., description="Mouth aspect ratio")
+    yaw: float = Field(..., description="Head yaw (degrees)")
+    pitch: float = Field(..., description="Head pitch (degrees)")
+    roll: float = Field(..., description="Head roll (degrees)")
+    timestamp: float = Field(..., description="Client time in ms (performance.now or epoch)")
 
 
 class MetricBatch(BaseModel):
-    session_id: str
-    frames: List[MetricFrame]
+    session_id: Optional[str] = None
+    samples: list[MetricSample] = Field(default_factory=list)
 
 
 class BufferSummary(BaseModel):
     session_id: str
-    frame_count: int
-    duration_seconds: float
-    avg_ear: Optional[float]
-    avg_mar: Optional[float]
-    avg_yaw: Optional[float]
-    avg_pitch: Optional[float]
-    drowsy_frames: int      # EAR < 0.25
-    yawn_frames: int        # MAR > 0.6
-    distracted_frames: int  # |yaw| > 20 or |pitch| > 20
+    count: int
+    ear_left_avg: Optional[float] = None
+    ear_right_avg: Optional[float] = None
+    mar_avg: Optional[float] = None
+    yaw_avg: Optional[float] = None
+    pitch_avg: Optional[float] = None
+    roll_avg: Optional[float] = None
+    latest_timestamp: Optional[float] = None
 
 
 class StatusResponse(BaseModel):
-    active_sessions: int
-    sessions: List[BufferSummary]
+    sessions: list[BufferSummary]
