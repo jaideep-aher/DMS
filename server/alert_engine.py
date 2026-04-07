@@ -295,6 +295,13 @@ class AlertEngine:
                 self.mark_llm_called(session_id, key)
                 return self.threshold_based_alert(feats, context)
 
+            from server import crud
+
+            if not await crud.openai_may_call_llm():
+                logger.info("OpenAI global USD budget exhausted; threshold fallback for session %s", session_id)
+                self.mark_llm_called(session_id, key)
+                return self.threshold_based_alert(feats, context)
+
             user_content = f"Signal summary:\n{summary}\n\nRespond with JSON only."
             try:
                 resp = await client.chat.completions.create(
@@ -310,6 +317,8 @@ class AlertEngine:
                 logger.warning("OpenAI API error for session %s: %s", session_id, exc)
                 self.mark_llm_called(session_id, key)
                 return self.threshold_based_alert(feats, context)
+
+            await crud.openai_record_usage(getattr(resp, "usage", None))
 
             text = (resp.choices[0].message.content or "").strip()
             parsed = self._parse_llm_json(text)

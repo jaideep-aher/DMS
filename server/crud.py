@@ -1,14 +1,24 @@
-"""Async CRUD for trips and alerts."""
+"""Async CRUD for trips, alerts, and usage / global budget."""
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
-from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from server.sql_models import AlertRow, Trip
+from sqlalchemy import select, update
+
+from server.sql_models import AlertRow, GlobalBudget, Trip, UsageLedger
+
+logger = logging.getLogger(__name__)
+
+# Serialize all GlobalBudget row updates (activity + OpenAI USD) across workers' processes
+# this process only; multi-replica Railway needs Redis or DB row locks for strict correctness.
+_global_budget_row_lock = asyncio.Lock()
 
 
 async def create_trip(session: AsyncSession, trip_id: str) -> Trip:
@@ -92,3 +102,164 @@ async def list_alerts_for_trip(
 
 def route_points_to_json(points: list[dict[str, Any]]) -> str:
     return json.dumps(points, separators=(",", ":"))
+
+
+async def _ensure_global_budget(session: AsyncSession) -> GlobalBudget:
+    row = await session.get(GlobalBudget, 1)
+    if row is None:
+        now = datetime.now(timezone.utc)
+        row = GlobalBudget(
+            id=1,
+            activity_lifetime=0,
+            activity_day_utc=None,
+            activity_daily=0,
+            openai_usd_lifetime=0.0,
+            openai_day_utc=None,
+            openai_usd_daily=0.0,
+            updated_at=now,
+        )
+        session.add(row)
+        await session.flush()
+    return row
+
+
+def _openai_price_per_million() -> tuple[float, float]:
+    inp = float(os.environ.get("OPENAI_PRICE_INPUT_PER_MILLION", "0.15"))
+    out = float(os.environ.get("OPENAI_PRICE_OUTPUT_PER_MILLION", "0.60"))
+    return inp, out
+
+
+def _openai_budget_caps() -> tuple[float, float]:
+    life = float(os.environ.get("OPENAI_BUDGET_USD_LIFETIME", "50"))
+    daily = float(os.environ.get("OPENAI_BUDGET_USD_DAILY", "10"))
+    return life, daily
+
+
+def _usd_from_usage(usage: Any) -> float:
+    if usage is None:
+        return 0.0
+    pt = int(getattr(usage, "prompt_tokens", None) or 0)
+    ct = int(getattr(usage, "completion_tokens", None) or 0)
+    pin, pout = _openai_price_per_million()
+    return (pt / 1_000_000.0) * pin + (ct / 1_000_000.0) * pout
+
+
+async def openai_may_call_llm() -> bool:
+    """
+    True if another Chat Completions call is allowed under global USD caps.
+    Uses token-pricing env defaults (gpt-4o-mini–class); actual spend is recorded after the call.
+    """
+    async with _global_budget_row_lock:
+        from server.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            g = await _ensure_global_budget(session)
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            life_cap, daily_cap = _openai_budget_caps()
+
+            if float(g.openai_usd_lifetime) >= life_cap:
+                logger.info("OpenAI lifetime budget reached (%.4f / %.2f USD)", g.openai_usd_lifetime, life_cap)
+                return False
+            daily_spent = float(g.openai_usd_daily) if g.openai_day_utc == today else 0.0
+            if daily_spent >= daily_cap:
+                logger.info("OpenAI daily budget reached (%.4f / %.2f USD)", daily_spent, daily_cap)
+                return False
+
+            return True
+
+
+async def openai_record_usage(usage: Any) -> None:
+    """Add actual token cost from a completion response to global OpenAI USD counters."""
+    cost = _usd_from_usage(usage)
+    if cost <= 0:
+        return
+    async with _global_budget_row_lock:
+        from server.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            g = await _ensure_global_budget(session)
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            now = datetime.now(timezone.utc)
+
+            if g.openai_day_utc != today:
+                g.openai_day_utc = today
+                g.openai_usd_daily = 0.0
+
+            g.openai_usd_lifetime = float(g.openai_usd_lifetime) + cost
+            g.openai_usd_daily = float(g.openai_usd_daily) + cost
+            g.updated_at = now
+            await session.commit()
+            logger.info(
+                "OpenAI usage recorded: +$%.6f (lifetime $%.4f)",
+                cost,
+                g.openai_usd_lifetime,
+            )
+
+
+async def check_increment_usage(
+    session: AsyncSession,
+    fingerprint: str,
+    daily_max: int,
+    lifetime_max: int,
+    *,
+    global_daily_max: int = 0,
+    global_lifetime_max: int = 0,
+) -> tuple[bool, str]:
+    """
+    Increment usage by 1 if under per-IP and optional global activity caps (UTC day).
+    Returns (allowed, "") or (False, reason) where reason is
+    daily|lifetime|global_daily|global_lifetime.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc)
+
+    async with _global_budget_row_lock:
+        g = await _ensure_global_budget(session)
+
+        if g.activity_day_utc != today:
+            g.activity_day_utc = today
+            g.activity_daily = 0
+
+        if global_daily_max > 0 and int(g.activity_daily) >= global_daily_max:
+            return False, "global_daily"
+        if global_lifetime_max > 0 and int(g.activity_lifetime) >= global_lifetime_max:
+            return False, "global_lifetime"
+
+        row = await session.get(UsageLedger, fingerprint)
+        if row is None:
+            if 1 > lifetime_max:
+                return False, "lifetime"
+            if 1 > daily_max:
+                return False, "daily"
+            session.add(
+                UsageLedger(
+                    fingerprint=fingerprint,
+                    lifetime_total=1,
+                    day_utc=today,
+                    day_total=1,
+                    updated_at=now,
+                )
+            )
+            g.activity_lifetime = int(g.activity_lifetime) + 1
+            g.activity_daily = int(g.activity_daily) + 1
+            g.updated_at = now
+            await session.commit()
+            return True, ""
+
+        if row.day_utc != today:
+            row.day_utc = today
+            row.day_total = 0
+
+        if row.lifetime_total >= lifetime_max:
+            return False, "lifetime"
+        if row.day_total >= daily_max:
+            return False, "daily"
+
+        row.lifetime_total = int(row.lifetime_total) + 1
+        row.day_total = int(row.day_total) + 1
+        row.updated_at = now
+        g.activity_lifetime = int(g.activity_lifetime) + 1
+        g.activity_daily = int(g.activity_daily) + 1
+        g.updated_at = now
+        await session.commit()
+        return True, ""

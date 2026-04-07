@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -31,6 +31,7 @@ from server.models import (
     TripOut,
     TripsListResponse,
 )
+from server.rate_limit import enforce_rate_limit, enforce_websocket_batch
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -92,7 +93,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Driver Monitoring System", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="Driver Monitoring System", version="0.7.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -101,6 +102,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api"):
+        await enforce_rate_limit(request)
+    return await call_next(request)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.get("/api/trips", response_model=TripsListResponse)
@@ -320,6 +333,8 @@ async def metrics_websocket(websocket: WebSocket) -> None:
             text = msg.get("text")
             if not text:
                 continue
+            if not await enforce_websocket_batch(websocket):
+                break
             try:
                 raw = json.loads(text)
                 batch = MetricBatch.model_validate(raw)

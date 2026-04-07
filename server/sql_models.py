@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from server.database import Base
@@ -50,3 +50,30 @@ class AlertRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     trip: Mapped["Trip"] = relationship("Trip", back_populates="alerts")
+
+
+class UsageLedger(Base):
+    """HMAC fingerprint → rolling daily + lifetime request counts (abuse limits)."""
+
+    __tablename__ = "usage_ledger"
+
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    lifetime_total: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    day_utc: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    day_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GlobalBudget(Base):
+    """Single row (id=1): aggregate activity across all clients + estimated OpenAI spend (USD)."""
+
+    __tablename__ = "global_budget"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    activity_lifetime: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    activity_day_utc: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    activity_daily: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    openai_usd_lifetime: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    openai_day_utc: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    openai_usd_daily: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -62,6 +62,34 @@ Open `http://localhost:8000`, allow the camera. Toggle **Demo mode** to simulate
 10. Optionally open browser devtools → **Network** → confirm **WebSocket** to `/ws/metrics` is **101** and messages flow.
 11. Optional: `GET /api/trips` after a session; `GET /api/alerts?session_id=<id from hello>` (or `trip_id=`) loads persisted alerts from the database.
 
+### Abuse limits (optional variables)
+
+Per-client limits use `X-Forwarded-For` (first hop) when present (Railway). Each **`/api/*` request** and each **WebSocket text message** counts as one unit toward daily and lifetime totals. A **sliding per-minute** cap is enforced in memory per server process.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `RATE_LIMIT_ENABLED` | `true` | Set `false` to disable (e.g. local stress testing). |
+| `RATE_LIMIT_RPM` | `90` | Max units per client per rolling 60 seconds. |
+| `RATE_LIMIT_DAILY` | `8000` | Max units per client per **UTC calendar day** (stored in DB). |
+| `RATE_LIMIT_LIFETIME` | `500000` | Max units per client **all time** (stored in DB). |
+| `RATE_LIMIT_SECRET` | dev fallback | Set a long random value in production; used to hash client IPs (raw IPs are not stored). |
+
+| `GLOBAL_UNITS_DAILY` | `2000000` | **All users combined** — max counted units per UTC day (API + WS). Set `0` to disable. |
+| `GLOBAL_UNITS_LIFETIME` | `0` | **All users combined** — max lifetime units; `0` = unlimited. |
+
+**OpenAI spend (global, all users)**
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `OPENAI_BUDGET_USD_LIFETIME` | `50` | Estimated total **USD** for Chat Completions (from token usage × price); LLM path stops when reached. |
+| `OPENAI_BUDGET_USD_DAILY` | `10` | Max estimated **USD** per UTC day for the LLM path. |
+| `OPENAI_PRICE_INPUT_PER_MILLION` | `0.15` | Dollars per 1M **input** tokens (set for your model). |
+| `OPENAI_PRICE_OUTPUT_PER_MILLION` | `0.60` | Dollars per 1M **output** tokens. |
+
+Costs are computed from each response’s `usage` field; defaults match **gpt-4o-mini**–class pricing. Tune prices if you change `OPENAI_MODEL`.
+
+`GET /health` is not limited. Static pages and `/js/*` assets are not counted—only API and WebSocket metric payloads.
+
 ## Colab benchmark (`benchmark.ipynb`)
 
 ### Where to get video clips
@@ -116,6 +144,7 @@ benchmark.ipynb     # Colab: video → metrics → OpenAI vs baseline
 
 | Endpoint | Purpose |
 |----------|---------|
+| `GET /health` | Liveness probe; not rate-limited. |
 | `WS /ws/metrics` | Client sends `{type:"metrics_batch",v:1,samples:[...],context?:{...}}`; server sends `hello` with `session_id` / `trip_id`, then `{type:"alert",v:1,...}` (optional `id` = DB row). |
 | `GET /api/status?session_id=` | Rolling buffer summary for an active WebSocket. |
 | `GET /api/alerts?session_id=` or `?trip_id=` | Alert log for that trip from the database. |
