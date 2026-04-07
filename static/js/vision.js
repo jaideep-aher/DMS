@@ -252,12 +252,12 @@
 
       if (typeof drawConnectors === "function" && typeof FACEMESH_TESSELATION !== "undefined") {
         drawConnectors(ctx, lm, FACEMESH_TESSELATION, {
-          color: "#C0C0C070",
+          color: "rgba(92, 179, 154, 0.22)",
           lineWidth: 1,
         });
-        drawConnectors(ctx, lm, FACEMESH_RIGHT_EYE, { color: "#30FF30", lineWidth: 1 });
-        drawConnectors(ctx, lm, FACEMESH_LEFT_EYE, { color: "#3030FF", lineWidth: 1 });
-        drawConnectors(ctx, lm, FACEMESH_LIPS, { color: "#E0E0E0", lineWidth: 1 });
+        drawConnectors(ctx, lm, FACEMESH_RIGHT_EYE, { color: "rgba(92, 179, 154, 0.75)", lineWidth: 1 });
+        drawConnectors(ctx, lm, FACEMESH_LEFT_EYE, { color: "rgba(129, 168, 190, 0.7)", lineWidth: 1 });
+        drawConnectors(ctx, lm, FACEMESH_LIPS, { color: "rgba(201, 160, 122, 0.65)", lineWidth: 1 });
       }
 
       const earL = aspectRatio6(lm, LEFT_EYE_INDICES, w, h);
@@ -290,10 +290,10 @@
         `MAR: ${outM.toFixed(3)}`,
         `Yaw: ${pose.yaw.toFixed(1)}°  Pitch: ${pose.pitch.toFixed(1)}°  Roll: ${pose.roll.toFixed(1)}°`,
       ];
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillStyle = "rgba(12, 14, 17, 0.82)";
       ctx.fillRect(8, 8, 420, 72);
-      ctx.fillStyle = "#fff";
-      ctx.font = "14px system-ui, sans-serif";
+      ctx.fillStyle = "#e8eaef";
+      ctx.font = "500 13px 'DM Sans', system-ui, sans-serif";
       lines.forEach((line, i) => ctx.fillText(line, 16, 28 + i * 20));
     }
 

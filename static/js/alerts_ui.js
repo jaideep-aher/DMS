@@ -7,13 +7,13 @@
   const historyEl = document.getElementById("alert-history");
 
   const BADGE_BASE =
-    "severity-badge text-xl sm:text-2xl md:text-3xl font-bold px-4 py-2 rounded-xl border-2 transition-all duration-300";
+    "severity-badge text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight px-5 py-2.5 rounded-xl border transition-all duration-300";
 
   const BADGE_STYLES = {
-    none: "bg-emerald-950/90 text-emerald-300 border-emerald-600/80",
-    mild: "bg-amber-950/90 text-amber-200 border-amber-600",
-    moderate: "bg-orange-950/90 text-orange-200 border-orange-500",
-    severe: "bg-red-950/90 text-red-200 border-red-500",
+    none: "bg-[#122420] text-[#9fd4c4] border-[#2f5c4f] shadow-none",
+    mild: "bg-[#1c1a14] text-[#dcc9a0] border-[#4a4334]",
+    moderate: "bg-[#231a16] text-[#e8c4ae] border-[#5c3f32]",
+    severe: "bg-[#1f1215] text-[#f0c8cf] border-[#5c3038]",
   };
 
   const LABELS = { none: "NONE", mild: "MILD", moderate: "MODERATE", severe: "SEVERE" };
@@ -41,7 +41,7 @@
     if (!historyEl) return;
     const li = document.createElement("li");
     li.className =
-      "rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-2 text-xs md:text-sm";
+      "rounded-xl border border-dms-line bg-dms-lift/40 px-3.5 py-2.5 text-xs md:text-sm";
     const t = new Date(ts * 1000).toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit",
@@ -49,15 +49,15 @@
     });
     const sevClass =
       {
-        mild: "text-amber-400",
-        moderate: "text-orange-400",
-        severe: "text-red-400",
-        none: "text-slate-500",
-      }[severity] || "text-slate-400";
+        mild: "text-[#c9a86e]",
+        moderate: "text-[#d4a090]",
+        severe: "text-[#e8a0a8]",
+        none: "text-dms-dim",
+      }[severity] || "text-dms-muted";
 
-    li.innerHTML = `<div class="flex flex-wrap items-baseline gap-2 mb-1"><span class="font-bold uppercase tracking-wide ${sevClass}">${escapeHtml(
+    li.innerHTML = `<div class="flex flex-wrap items-baseline gap-2 mb-1"><span class="font-semibold uppercase tracking-[0.12em] text-[10px] ${sevClass}">${escapeHtml(
       severity
-    )}</span><span class="text-slate-500 font-mono text-[10px]">${escapeHtml(t)}</span></div><p class="text-slate-200 leading-snug">${escapeHtml(
+    )}</span><span class="text-dms-dim font-mono text-[10px]">${escapeHtml(t)}</span></div><p class="text-dms-ink/90 leading-snug">${escapeHtml(
       text
     )}</p>`;
     historyEl.insertBefore(li, historyEl.firstChild);

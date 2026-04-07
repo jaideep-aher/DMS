@@ -5,6 +5,10 @@
   const WINDOW_MS = 30_000;
   const points = [];
 
+  const TICK = "#6b7288";
+  const GRID = "rgba(228, 232, 240, 0.06)";
+  const TITLE = "#9ca3af";
+
   function trim() {
     const cutoff = performance.now() - WINDOW_MS;
     while (points.length && points[0].x < cutoff) points.shift();
@@ -23,7 +27,14 @@
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: { enabled: true },
+        tooltip: {
+          enabled: true,
+          backgroundColor: "rgba(19, 22, 28, 0.95)",
+          titleColor: "#e8eaef",
+          bodyColor: "#c9cdd5",
+          borderColor: "rgba(228,232,240,0.1)",
+          borderWidth: 1,
+        },
       },
       scales: {
         x: {
@@ -32,16 +43,22 @@
           min: -30,
           max: 0,
           ticks: {
-            color: "#94a3b8",
+            color: TICK,
             maxTicksLimit: 7,
             callback: (v) => `${v}s`,
+            font: { size: 10, family: "'JetBrains Mono', monospace" },
           },
-          grid: { color: "rgba(148,163,184,0.15)" },
+          grid: { color: GRID },
+          border: { display: false },
         },
         y: {
           display: true,
-          ticks: { color: "#94a3b8" },
-          grid: { color: "rgba(148,163,184,0.15)" },
+          ticks: {
+            color: TICK,
+            font: { size: 10, family: "'JetBrains Mono', monospace" },
+          },
+          grid: { color: GRID },
+          border: { display: false },
         },
       },
     };
@@ -56,11 +73,12 @@
             {
               label: "EAR (avg)",
               data: [],
-              borderColor: "#38bdf8",
-              backgroundColor: "rgba(56,189,248,0.12)",
+              borderColor: "#5cb39a",
+              backgroundColor: "rgba(92, 179, 154, 0.14)",
               fill: true,
-              tension: 0.25,
+              tension: 0.35,
               pointRadius: 0,
+              borderWidth: 1.5,
             },
           ],
         },
@@ -68,7 +86,13 @@
           ...commonOpts,
           plugins: {
             ...commonOpts.plugins,
-            title: { display: true, text: "EAR (30s)", color: "#cbd5e1", font: { size: 11 } },
+            title: {
+              display: true,
+              text: "Eye aspect ratio",
+              color: TITLE,
+              font: { size: 10, weight: "600", family: "'DM Sans', sans-serif" },
+              padding: { bottom: 6 },
+            },
           },
           scales: {
             ...commonOpts.scales,
@@ -85,11 +109,12 @@
             {
               label: "MAR",
               data: [],
-              borderColor: "#a78bfa",
-              backgroundColor: "rgba(167,139,250,0.12)",
+              borderColor: "#c9a07a",
+              backgroundColor: "rgba(201, 160, 122, 0.12)",
               fill: true,
-              tension: 0.25,
+              tension: 0.35,
               pointRadius: 0,
+              borderWidth: 1.5,
             },
           ],
         },
@@ -97,7 +122,13 @@
           ...commonOpts,
           plugins: {
             ...commonOpts.plugins,
-            title: { display: true, text: "MAR (30s)", color: "#cbd5e1", font: { size: 11 } },
+            title: {
+              display: true,
+              text: "Mouth aspect ratio",
+              color: TITLE,
+              font: { size: 10, weight: "600", family: "'DM Sans', sans-serif" },
+              padding: { bottom: 6 },
+            },
           },
           scales: {
             ...commonOpts.scales,

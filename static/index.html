@@ -4,111 +4,151 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Driver Monitoring System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            animation: { "pulse-alert": "pulse-alert 1.5s ease-in-out infinite" },
+            fontFamily: {
+              sans: ['"DM Sans"', "system-ui", "sans-serif"],
+              mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+            },
+            colors: {
+              dms: {
+                void: "#070809",
+                base: "#0c0e11",
+                panel: "#13161c",
+                lift: "#1a1e27",
+                line: "rgba(228, 232, 240, 0.07)",
+                line2: "rgba(228, 232, 240, 0.11)",
+                ink: "#e8eaef",
+                muted: "#8b919d",
+                dim: "#5c6370",
+                jade: "#5cb39a",
+                jadeDim: "#3d7a68",
+                coral: "#c9a07a",
+                coralDim: "#8f7358",
+              },
+            },
+            animation: { "pulse-alert": "pulse-alert 2s ease-in-out infinite" },
             keyframes: {
               "pulse-alert": {
-                "0%, 100%": { opacity: "1", transform: "scale(1)" },
-                "50%": { opacity: "0.85", transform: "scale(1.02)" },
+                "0%, 100%": { opacity: "1", boxShadow: "0 0 0 0 rgba(201, 160, 122, 0)" },
+                "50%": { opacity: "0.92", boxShadow: "0 0 20px -4px rgba(201, 160, 122, 0.15)" },
               },
             },
           },
         },
       };
     </script>
+    <style>
+      html {
+        font-feature-settings: "kern" 1, "liga" 1;
+      }
+      #speed-slider {
+        accent-color: #5cb39a;
+      }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   </head>
-  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+  <body class="min-h-screen bg-dms-base text-dms-ink antialiased font-sans selection:bg-dms-jade/30">
     <header
-      class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+      class="border-b border-dms-line bg-dms-panel/95 backdrop-blur-md px-4 py-3.5 flex flex-wrap items-center justify-between gap-3"
     >
       <div>
-        <h1 class="text-lg font-semibold tracking-tight text-white">Driver Monitoring System</h1>
-        <p class="text-xs text-slate-400 mt-0.5" id="status">Starting…</p>
+        <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-dms-dim mb-0.5">In-cabin monitor</p>
+        <h1 class="text-lg font-semibold tracking-tight text-dms-ink">Driver Monitoring</h1>
+        <p class="text-xs text-dms-muted mt-1 font-mono" id="status">Starting…</p>
       </div>
       <label
-        class="flex items-center gap-2 cursor-pointer select-none text-sm text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700"
+        class="flex items-center gap-2.5 cursor-pointer select-none text-sm text-dms-muted bg-dms-lift/80 px-3.5 py-2 rounded-lg border border-dms-line hover:border-dms-line2 transition-colors"
       >
-        <input type="checkbox" id="demo-toggle" class="rounded border-slate-600" />
-        <span>Demo mode</span>
-        <span class="text-[10px] text-slate-500 max-w-[140px] leading-tight"
-          >Simulates low EAR &amp; yawns (client-side)</span
+        <input
+          type="checkbox"
+          id="demo-toggle"
+          class="rounded border-dms-line2 bg-dms-panel text-dms-jade focus:ring-dms-jade/40"
+        />
+        <span class="text-dms-ink font-medium">Demo</span>
+        <span class="text-[10px] text-dms-dim max-w-[130px] leading-tight hidden sm:inline"
+          >Synthetic fatigue for demos</span
         >
       </label>
     </header>
 
-    <div class="p-3 md:p-4 max-w-[1600px] mx-auto flex flex-col gap-4 pb-28">
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <!-- Left: camera + mesh -->
+    <div class="p-3 md:p-5 max-w-[1600px] mx-auto flex flex-col gap-5 pb-32">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <section
-          class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden shadow-xl"
+          class="rounded-2xl border border-dms-line bg-dms-panel overflow-hidden shadow-[0_24px_48px_-24px_rgba(0,0,0,0.65)]"
           aria-label="Webcam and face mesh"
         >
-          <div class="aspect-[4/3] max-h-[min(72vh,640px)] bg-black relative mx-auto">
+          <div class="aspect-[4/3] max-h-[min(72vh,640px)] bg-dms-void relative mx-auto ring-1 ring-inset ring-dms-line">
             <video id="video" class="hidden" playsinline></video>
             <canvas id="canvas" class="w-full h-full object-contain block"></canvas>
           </div>
         </section>
 
-        <!-- Right column -->
-        <div class="flex flex-col gap-4 min-h-0">
-          <!-- Sparklines -->
+        <div class="flex flex-col gap-5 min-h-0">
           <section
-            class="rounded-xl border border-slate-800 bg-slate-900/50 p-3 shadow-lg"
+            class="rounded-2xl border border-dms-line bg-dms-panel p-4 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.5)]"
             aria-label="Signal charts"
           >
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Last 30 seconds</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 h-36 md:h-40">
-              <div class="min-h-0 relative">
+            <div class="flex items-end justify-between mb-3">
+              <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-dms-dim">Signals · 30s</h2>
+              <span class="text-[10px] text-dms-dim font-mono">EAR · MAR</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 h-36 md:h-40">
+              <div class="min-h-0 relative rounded-lg bg-dms-lift/50 ring-1 ring-dms-line">
                 <canvas id="chart-ear" class="!h-full !w-full"></canvas>
               </div>
-              <div class="min-h-0 relative">
+              <div class="min-h-0 relative rounded-lg bg-dms-lift/50 ring-1 ring-dms-line">
                 <canvas id="chart-mar" class="!h-full !w-full"></canvas>
               </div>
             </div>
           </section>
 
-          <!-- Severity + alert card -->
           <section
-            class="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-lg flex flex-col gap-3"
+            class="rounded-2xl border border-dms-line bg-dms-panel p-5 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.5)] flex flex-col gap-4"
             aria-live="polite"
           >
             <div class="flex items-center gap-3 flex-wrap">
-              <span class="text-xs font-medium text-slate-500 uppercase">Severity</span>
+              <span class="text-[11px] font-semibold uppercase tracking-[0.15em] text-dms-dim">Severity</span>
               <div
                 id="severity-badge"
-                class="severity-badge text-2xl md:text-3xl font-bold px-4 py-2 rounded-xl border-2 transition-all duration-300"
+                class="severity-badge text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight px-5 py-2.5 rounded-xl border transition-all duration-300"
                 data-severity="none"
               >
                 NONE
               </div>
             </div>
             <div
-              class="rounded-lg bg-slate-800/60 border border-slate-700/80 p-4 min-h-[4.5rem]"
+              class="rounded-xl bg-dms-lift/60 border border-dms-line p-4 min-h-[4.75rem]"
               id="alert-card"
             >
-              <p class="text-xs text-slate-500 mb-1">Alert</p>
-              <p id="alert-card-text" class="text-slate-100 text-sm md:text-base leading-relaxed">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-dms-dim mb-2">Message</p>
+              <p id="alert-card-text" class="text-dms-ink/95 text-sm md:text-[15px] leading-relaxed">
                 Waiting for connection…
               </p>
             </div>
           </section>
 
-          <!-- Driving context -->
           <section
-            class="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-lg"
+            class="rounded-2xl border border-dms-line bg-dms-panel p-5 shadow-[0_16px_40px_-20px_rgba(0,0,0,0.5)]"
             aria-label="Driving context simulation"
           >
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Driving context</h2>
-            <div class="space-y-3">
+            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-dms-dim mb-4">Context</h2>
+            <div class="space-y-4">
               <div>
-                <label for="speed-slider" class="text-sm text-slate-400 flex justify-between gap-2">
+                <label for="speed-slider" class="text-sm text-dms-muted flex justify-between gap-2">
                   <span>Speed</span>
-                  <span class="text-white font-mono"><span id="speed-value">35</span> mph</span>
+                  <span class="text-dms-ink font-mono text-sm"
+                    ><span id="speed-value">35</span> mph</span
+                  >
                 </label>
                 <input
                   type="range"
@@ -116,25 +156,33 @@
                   min="0"
                   max="120"
                   value="35"
-                  class="w-full mt-1 accent-sky-500 h-2 rounded-lg appearance-none bg-slate-800"
+                  class="w-full mt-2 h-1.5 rounded-full appearance-none bg-dms-lift"
                 />
               </div>
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <div class="rounded-lg bg-slate-800/40 px-3 py-2 border border-slate-700/50">
-                  <span class="text-slate-500 text-xs block">Road</span>
-                  <span id="road-type" class="font-medium text-sky-300">city</span>
+              <div class="grid grid-cols-2 gap-2.5 text-sm">
+                <div class="rounded-xl bg-dms-lift/50 px-3.5 py-2.5 border border-dms-line">
+                  <span class="text-dms-dim text-[10px] font-semibold uppercase tracking-wider block mb-0.5"
+                    >Road</span
+                  >
+                  <span id="road-type" class="font-medium text-dms-jade">city</span>
                 </div>
-                <div class="rounded-lg bg-slate-800/40 px-3 py-2 border border-slate-700/50">
-                  <span class="text-slate-500 text-xs block">Session</span>
-                  <span class="font-medium"><span id="session-timer">0</span> min</span>
+                <div class="rounded-xl bg-dms-lift/50 px-3.5 py-2.5 border border-dms-line">
+                  <span class="text-dms-dim text-[10px] font-semibold uppercase tracking-wider block mb-0.5"
+                    >Session</span
+                  >
+                  <span class="font-medium text-dms-ink"><span id="session-timer">0</span> min</span>
                 </div>
-                <div class="rounded-lg bg-slate-800/40 px-3 py-2 border border-slate-700/50">
-                  <span class="text-slate-500 text-xs block">Local time</span>
-                  <span id="local-clock" class="font-medium">—</span>
+                <div class="rounded-xl bg-dms-lift/50 px-3.5 py-2.5 border border-dms-line">
+                  <span class="text-dms-dim text-[10px] font-semibold uppercase tracking-wider block mb-0.5"
+                    >Time</span
+                  >
+                  <span id="local-clock" class="font-medium font-mono text-sm">—</span>
                 </div>
-                <div class="rounded-lg bg-slate-800/40 px-3 py-2 border border-slate-700/50">
-                  <span class="text-slate-500 text-xs block">Daypart</span>
-                  <span id="daypart" class="font-medium text-violet-300">—</span>
+                <div class="rounded-xl bg-dms-lift/50 px-3.5 py-2.5 border border-dms-line">
+                  <span class="text-dms-dim text-[10px] font-semibold uppercase tracking-wider block mb-0.5"
+                    >Daypart</span
+                  >
+                  <span id="daypart" class="font-medium text-dms-coral">—</span>
                 </div>
               </div>
             </div>
@@ -142,15 +190,14 @@
         </div>
       </div>
 
-      <!-- Bottom: alert log -->
       <section
-        class="rounded-xl border border-slate-800 bg-slate-900/50 shadow-lg overflow-hidden flex flex-col max-h-48 md:max-h-56"
+        class="rounded-2xl border border-dms-line bg-dms-panel shadow-[0_16px_40px_-20px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-52 md:max-h-60"
         aria-label="Alert history"
       >
-        <div class="px-4 py-2 border-b border-slate-800 bg-slate-900/80">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Alert log</h2>
+        <div class="px-4 py-2.5 border-b border-dms-line bg-dms-lift/40">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-dms-dim">Alert log</h2>
         </div>
-        <ul id="alert-history" class="alert-history overflow-y-auto flex-1 p-2 space-y-2 text-sm"></ul>
+        <ul id="alert-history" class="alert-history overflow-y-auto flex-1 p-3 space-y-2 text-sm"></ul>
       </section>
     </div>
 
