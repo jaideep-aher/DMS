@@ -54,7 +54,11 @@ class AlertManager:
         alert_text: str,
         reasoning: Optional[str] = None,
     ) -> Optional[AlertRecord]:
-        """If cooldown allows, store alert and return record for WebSocket push."""
+        """
+        Persist an alert and return it for WebSocket delivery if the 15s cooldown has elapsed.
+
+        Returns ``None`` when suppressed by cooldown (duplicate chatter).
+        """
         if not self.should_emit_to_client(session_id):
             return None
         now = time.time()

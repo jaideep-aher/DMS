@@ -31,6 +31,46 @@
   const canvasEl = document.getElementById("canvas");
   const statusEl = document.getElementById("status");
 
+  let demoT0 = null;
+
+  function isDemoMode() {
+    const el = document.getElementById("demo-toggle");
+    return !!(el && el.checked);
+  }
+
+  const demoToggle = document.getElementById("demo-toggle");
+  if (demoToggle) {
+    demoToggle.addEventListener("change", () => {
+      if (demoToggle.checked) {
+        demoT0 = performance.now();
+      } else {
+        demoT0 = null;
+      }
+    });
+  }
+
+  /**
+   * Override metrics for demos: gradually reduce EAR and inject periodic high MAR (yawn).
+   */
+  function applyDemoMetrics(earL, earR, mar) {
+    if (!isDemoMode() || demoT0 === null) {
+      return { earL, earR, mar };
+    }
+    const elapsed = (performance.now() - demoT0) / 1000;
+    const drift = Math.min(0.9, elapsed * 0.03);
+    let outL = Math.max(0.03, earL * (1 - drift));
+    let outR = Math.max(0.03, earR * (1 - drift));
+    let outM = mar;
+    const cycle = elapsed % 12;
+    if (cycle > 3.5 && cycle < 5.2) {
+      outM = Math.max(outM, 0.5 + 0.06 * Math.sin(elapsed * 2.8));
+    }
+    if (cycle > 8.5 && cycle < 9.8) {
+      outM = Math.max(outM, 0.46);
+    }
+    return { earL: outL, earR: outR, mar: outM };
+  }
+
   let ctx = null;
   let faceMesh = null;
   let camera = null;
@@ -225,15 +265,20 @@
       const mar = aspectRatio6(lm, MOUTH_INNER_INDICES, w, h);
       const pose = headPosePnP(lm, w, h);
 
+      const dm = applyDemoMetrics(earL, earR, mar);
+      const outL = dm.earL;
+      const outR = dm.earR;
+      const outM = dm.mar;
+
       const ts =
         typeof performance !== "undefined" && performance.now
           ? performance.now()
           : Date.now();
 
       dispatchMetric({
-        ear_left: earL,
-        ear_right: earR,
-        mar,
+        ear_left: outL,
+        ear_right: outR,
+        mar: outM,
         yaw: pose.yaw,
         pitch: pose.pitch,
         roll: pose.roll,
@@ -241,8 +286,8 @@
       });
 
       const lines = [
-        `EAR L: ${earL.toFixed(3)}  R: ${earR.toFixed(3)}`,
-        `MAR: ${mar.toFixed(3)}`,
+        `EAR L: ${outL.toFixed(3)}  R: ${outR.toFixed(3)}${isDemoMode() ? " (demo)" : ""}`,
+        `MAR: ${outM.toFixed(3)}`,
         `Yaw: ${pose.yaw.toFixed(1)}°  Pitch: ${pose.pitch.toFixed(1)}°  Roll: ${pose.roll.toFixed(1)}°`,
       ];
       ctx.fillStyle = "rgba(0,0,0,0.55)";

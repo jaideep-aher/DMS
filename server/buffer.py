@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Rolling in-memory store of per-session metric samples (server receive time)."""
+
 import time
 from collections import deque
 
@@ -7,7 +9,11 @@ from server.models import BufferSummary, MetricSample
 
 
 class RollingSignalBuffer:
-    """In-memory rolling buffer of metric samples (default ~30s at 200ms batch cadence)."""
+    """
+    Deque of ``(MetricSample, server_monotonic_time)`` for WebSocket-ingested batches.
+
+    Default ``maxlen=90`` holds roughly 30s of traffic at ~200ms client batching.
+    """
 
     def __init__(self, maxlen: int = 90) -> None:
         self._items: deque[tuple[MetricSample, float]] = deque(maxlen=maxlen)

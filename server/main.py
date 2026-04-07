@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -19,7 +20,15 @@ from server.models import AlertsResponse, DrivingContext, MetricBatch, StatusRes
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Driver Monitoring System", version="0.2.0")
+logger = logging.getLogger(__name__)
+
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
+app = FastAPI(title="Driver Monitoring System", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -84,7 +93,7 @@ async def _run_alert_pipeline(
             }
         )
     except Exception:
-        pass
+        logger.exception("Alert pipeline failed for session %s", session_id)
 
 
 @app.websocket("/ws/metrics")
