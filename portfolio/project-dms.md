@@ -6,25 +6,25 @@ Paste into your personal site (Next.js, Astro, Framer, or static HTML). Live app
 
 ## Short headline (hero / card title)
 
-**Driver Monitoring System** — real-time in-cabin psychophysiology & gaze-adjacent inference
+**Driver Monitoring System** — real-time occupant-state inference & dual hazard fusion
 
 ---
 
 ## One-liner (subtitle)
 
-Browser-side MediaPipe vision, dual-path alert policy (LLM + deterministic), async PostgreSQL trip ledger, WebSocket telemetry — deployed on Railway.
+Dense mesh + iris priors, split-brain fatigue vs. distraction policies, SHA-keyed semantic alerts, async PostgreSQL forensic ledger—same origin as the policy engine.
 
 ---
 
 ## Body copy (dense / “heavy project” tone)
 
-End-to-end driver-monitoring prototype with **edge-local perception** (MediaPipe Face Mesh, refined iris topology, EAR/MAR, PnP head pose via OpenCV.js with geometric fallback) and a **FastAPI** control plane. Metrics egress uses a versioned **WebSocket** schema; server-side **rolling temporal buffers** feed debounced **OpenAI Chat Completions** plus orthogonal **distraction heuristics** (gaze-region voting, independent cooldown namespace). Persistence through **SQLAlchemy 2.0 async** against **PostgreSQL** (TLS to `asyncpg`) with SQLite fallback; trip entities carry route polylines, odometer integration, and append-only alert history for analytics backfills. **Docker** + **Railway** deployment with co-located static hosting for single-origin camera policy compliance.
+End-to-end **cognitive–motor threat surface**: refined facial mesh with pentadic iris topology, EAR/MAR strain analogs, PnP head pose with geometric fallback, and a **gaze_region** lattice for visual escape from the forward field. Collapsed telemetry ships on a versioned **metrics_batch** envelope; **FastAPI** ASGI control plane with **RollingSignalBuffer** windows, parallel **DistractionMonitor** (orthogonal cooldowns), and a **semantic synthesis head** with snapshot deduplication—not a single raw frame crosses the trust boundary. **SQLAlchemy 2.0** async to **PostgreSQL** (TLS) with embedded SQLite for lab; trips and append-only alert ledgers for replay and liability graphs. **Dockerized** service with co-located static delivery.
 
 ---
 
 ## Tech tags (chips)
 
-`FastAPI` · `WebSockets` · `SQLAlchemy 2.0` · `asyncpg` · `PostgreSQL` · `MediaPipe` · `OpenCV.js` · `OpenAI API` · `Docker` · `Railway` · `Pydantic v2` · `Uvicorn`
+`FastAPI` · `SQLAlchemy 2.0` · `asyncpg` · `PostgreSQL` · `Pydantic v2` · `Uvicorn` · `MediaPipe-class mesh` · `Docker`
 
 ---
 
@@ -41,7 +41,7 @@ End-to-end driver-monitoring prototype with **edge-local perception** (MediaPipe
 <article className="project-card">
   <h3>Driver Monitoring System</h3>
   <p className="muted">
-    In-cabin DMS prototype — browser vision, dual alert topologies, async trip persistence.
+    In-cabin hazard fusion — dual alert manifolds, forensic trip ledger, zero raw-frame egress.
   </p>
   <a href="https://dms.aher.dev/" target="_blank" rel="noopener noreferrer">
     Live demo
@@ -63,18 +63,11 @@ End-to-end driver-monitoring prototype with **edge-local perception** (MediaPipe
   "title": "Driver Monitoring System",
   "year": "2026",
   "role": "Design & full-stack implementation",
-  "summary": "Real-time DMS stack: MediaPipe in-browser, FastAPI + WebSockets, SQLAlchemy async persistence, dual fatigue/distraction policies, Railway deployment.",
+  "summary": "Real-time DMS: dense mesh + iris priors, dual fatigue/distraction policies, deduplicated semantic alerts, async PostgreSQL trip/alert forensics, Dockerized ASGI stack.",
   "links": {
     "live": "https://dms.aher.dev/",
     "about": "https://dms.aher.dev/about.html"
   },
-  "tags": [
-    "FastAPI",
-    "WebSockets",
-    "PostgreSQL",
-    "MediaPipe",
-    "OpenAI",
-    "Railway"
-  ]
+  "tags": ["FastAPI", "PostgreSQL", "SQLAlchemy", "Computer vision", "Docker"]
 }
 ```

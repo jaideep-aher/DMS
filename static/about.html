@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Edge-adjacent driver monitoring: browser vision pipeline, WebSocket telemetry, async inference, and persistent trip analytics."
+      content="Closed-loop occupant-state inference: sub-second psychophysiology, dual hazard fusion, cryptographically keyed alert policy, append-only trip forensics."
     />
     <title>About · Driver Monitoring System</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -69,12 +69,13 @@
 
     <article class="max-w-3xl mx-auto px-4 py-10 md:py-14 space-y-10">
       <header class="space-y-3">
-        <p class="text-xs font-mono text-dms-jade uppercase tracking-widest">In-cabin sensing · production-shaped prototype</p>
+        <p class="text-xs font-mono text-dms-jade uppercase tracking-widest">Occupant cognition · hazard fusion · forensic ledger</p>
         <h2 class="text-2xl md:text-3xl font-semibold tracking-tight text-dms-ink leading-tight">
-          Real-time psychophysiological inference with dual hazard topology: fatigue vs. visual distraction.
+          A real-time <span class="text-dms-coral">cognitive–motor threat surface</span> mapped from facial micro-dynamics, then collapsed
+          into dual, non-commuting alert manifolds—fatigue versus visual escape from the forward field.
         </h2>
         <p class="text-dms-muted text-sm md:text-base leading-relaxed">
-          Public deployment:
+          Canonical entry:
           <a href="https://dms.aher.dev/" class="text-dms-jade underline decoration-dms-jade/40 hover:decoration-dms-jade"
             >https://dms.aher.dev/</a
           >
@@ -82,23 +83,23 @@
       </header>
 
       <section class="space-y-4">
-        <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Architecture</h3>
+        <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Split-brain topology</h3>
         <div class="rounded-2xl border border-dms-line bg-dms-panel p-5 md:p-6 space-y-4 text-sm text-dms-muted leading-relaxed">
           <p>
-            The stack is deliberately split across the <strong class="text-dms-ink font-medium">edge-adjacent client</strong> (all
-            vision inference local to the browser—no raw frame egress) and a
-            <strong class="text-dms-ink font-medium">stateful control plane</strong> implemented as an async Python service. Telemetry
-            egress is limited to derived scalar features, pose estimates, and quantized gaze proxies serialized in a
-            versioned WebSocket schema (<code class="text-dms-coral mono-block">metrics_batch v1</code>).
+            Raw photons never leave the observation plane: inference stays on the
+            <strong class="text-dms-ink font-medium">local capture stratum</strong>. Only collapsed statistics—aspect ratios, pose
+            cosines, iris-offset fields—cross the trust boundary on a
+            <strong class="text-dms-ink font-medium">versioned binary telemetry envelope</strong>
+            (<code class="text-dms-coral mono-block">metrics_batch v1</code>), keyed by session UUID and stamped with client monotonic
+            time.
           </p>
           <p>
-            Ingestion uses <strong class="text-dms-ink font-medium">FastAPI</strong> with ASGI lifecycle hooks for idempotent schema
-            materialization (<strong class="text-dms-ink font-medium">SQLAlchemy 2.0 declarative</strong> +
-            <code class="text-dms-coral">create_all</code> Phase-1 bootstrap; migration discipline deferred to Alembic). Persistence targets
-            <strong class="text-dms-ink font-medium">PostgreSQL</strong> via <code class="text-dms-coral">asyncpg</code> in production with
-            negotiated TLS to the wire protocol; local / CI fall back to
-            <strong class="text-dms-ink font-medium">SQLite</strong> + <code class="text-dms-coral">aiosqlite</code> for zero-config
-            ergonomics.
+            Upstream sits an <strong class="text-dms-ink font-medium">async ASGI control plane</strong> with lifecycle-gated schema
+            materialization: <strong class="text-dms-ink font-medium">SQLAlchemy 2.0</strong> declarative models, idempotent
+            <code class="text-dms-coral">create_all</code> bootstrap, and a write path that treats trips as
+            <strong class="text-dms-ink font-medium">first-class causal traces</strong>—not logfiles. Persistence is
+            <strong class="text-dms-ink font-medium">PostgreSQL</strong> over an async wire with negotiated TLS; offline / lab runs can
+            snap to embedded <strong class="text-dms-ink font-medium">SQLite</strong> without touching application code.
           </p>
         </div>
       </section>
@@ -107,19 +108,20 @@
         <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Perception substrate</h3>
         <ul class="space-y-3 text-sm text-dms-muted leading-relaxed list-disc pl-5 marker:text-dms-jade">
           <li>
-            <strong class="text-dms-ink">MediaPipe Face Mesh</strong> (refined landmark topology, iris pentads enabled): per-frame
-            extraction of six-point <abbr title="Eye Aspect Ratio">EAR</abbr> / <abbr title="Mouth Aspect Ratio">MAR</abbr> analogs,
-            rolling-statistics–friendly scalarization.
+            <strong class="text-dms-ink">Dense facial mesh</strong> with <strong class="text-dms-ink">refined iris loci</strong>: hundreds
+            of landmarks per frame, pentadic iris topology, per-frame scalarization into six-point
+            <abbr title="Eye Aspect Ratio">EAR</abbr> / <abbr title="Mouth Aspect Ratio">MAR</abbr> analogs—feeds that behave like
+            neuro-muscular strain gauges on eyelid compliance and mandible aperture.
           </li>
           <li>
-            <strong class="text-dms-ink">Head pose</strong>: iterative PnP against a canonical facial rig when
-            <strong class="text-dms-ink">OpenCV.js</strong> loads; deterministic geometric fallback to preserve availability under CDN
-            flake or CSP friction.
+            <strong class="text-dms-ink">Head pose as rigid-body hack</strong>: iterative perspective-n-point on a canonical cranial
+            rig, Rodrigues rotation unwrapped to Euler priors; if the photogrammetry stack is unavailable, a deterministic geometric
+            fallback keeps the pipeline from collapsing into NaNs.
           </li>
           <li>
-            <strong class="text-dms-ink">Attention &amp; distraction proxy</strong>: iris–sclera offset normalized against palpebral
-            fissure extrema, fused with Euler-angle priors to emit a discrete
-            <code class="text-dms-coral mono-block">gaze_region</code> lattice (forward / lateral / off-boresight / ventral fixation).
+            <strong class="text-dms-ink">Attention lattice</strong>: iris displacement normalized against palpebral fissure extrema,
+            fused with pose priors into a discrete <code class="text-dms-coral mono-block">gaze_region</code> codebook—forward, lateral
+            mirror bands, ventral fixation (lap / stack), off-boresight drift.
           </li>
         </ul>
       </section>
@@ -128,19 +130,19 @@
         <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Inference &amp; policy</h3>
         <ul class="space-y-3 text-sm text-dms-muted leading-relaxed list-disc pl-5 marker:text-dms-coral">
           <li>
-            <strong class="text-dms-ink">RollingSignalBuffer</strong>: server-monotonic deques with configurable horizon (~30 s @ 200 ms
-            client batching cadence) feeding short-window feature extraction (EAR dominance fraction, MAR excursion counting, pitch
-            swing / nodding heuristics).
+            <strong class="text-dms-ink">RollingSignalBuffer</strong>: server-monotonic deques, sliding temporal aperture (~30 s effective
+            memory at nominal batch cadence). Inside: EAR dominance mass, MAR excursion counts, pitch swing as micro-sleep / nod proxy.
           </li>
           <li>
-            <strong class="text-dms-ink">Dual alert topologies</strong>: (a) debounced LLM synthesis via OpenAI Chat Completions with
-            SHA-256–keyed snapshot deduplication and 30 s recall floor; (b) parallel
-            <strong class="text-dms-ink">DistractionMonitor</strong> with independent hysteresis, speed-gated activation, and
-            region-majority voting over sliding server windows—orthogonal cooldown namespaces vs. fatigue channel.
+            <strong class="text-dms-ink">Dual non-commuting alert channels</strong>: (a) a
+            <strong class="text-dms-ink">semantic synthesis head</strong>—natural-language alerts from fused feature summaries, with
+            SHA-256–keyed snapshot deduplication so the model cannot thrash on duplicate latent states; (b) a parallel
+            <strong class="text-dms-ink">DistractionMonitor</strong> with speed-gated hysteresis, region-majority voting, and
+            <strong class="text-dms-ink">orthogonal cooldown namespaces</strong> so visual escape and somnolence cannot starve each other.
           </li>
           <li>
-            <strong class="text-dms-ink">Threshold fallback</strong> when the generative path is cold: deterministic severity lattice
-            aligned with benchmark baselines (fixed EAR floor vs. contextual engine A/B in offline notebook pipeline).
+            <strong class="text-dms-ink">Lattice fallback</strong>: if the high-level policy path is cold, a deterministic severity
+            quantizer takes over—same thresholds used in offline A/B against fixed EAR floors in the benchmark harness.
           </li>
         </ul>
       </section>
@@ -148,28 +150,27 @@
       <section class="space-y-4">
         <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Data plane</h3>
         <p class="text-sm text-dms-muted leading-relaxed">
-          First-class <strong class="text-dms-ink font-medium">trip entities</strong> mirror WebSocket session UUIDs: bounded
-          <code class="text-dms-coral">route_json</code> polylines, odometer integration from synthesized speed–time quadrature,
-          monotonic alert counters, and append-only <strong class="text-dms-ink font-medium">alert ledger</strong> rows for post-hoc
-          forensics and dashboard backfills. REST projections expose cursorable trip lists and per-trip alert timelines.
+          Trips mirror session identity one-to-one: bounded <code class="text-dms-coral">route_json</code> polylines, odometer from
+          speed–time quadrature, monotonic alert counters, append-only <strong class="text-dms-ink font-medium">alert ledger</strong> for
+          post-hoc reconstruction—what fired, when, under which reasoning code. Read models expose cursorable trip lists and per-trip
+          timelines for anything downstream that cares about liability graphs or fleet replay.
         </p>
       </section>
 
       <section class="space-y-4">
-        <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Deployment</h3>
+        <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim">Hardening</h3>
         <p class="text-sm text-dms-muted leading-relaxed">
-          Containerized <strong class="text-dms-ink font-medium">Python 3.11</strong> image,
-          <strong class="text-dms-ink font-medium">Railway</strong>-native <code class="text-dms-coral">DATABASE_URL</code> injection,
-          <code class="text-dms-coral">PORT</code>-bound <strong class="text-dms-ink font-medium">Uvicorn</strong> workers, static asset
-          hosting co-located with the API for single-origin WebSocket + HTTPS camera policy compliance.
+          The service layer is pinned on a <strong class="text-dms-ink font-medium">modern Python</strong> runtime, ASGI-native workers,
+          and co-located static delivery so the capture UI and the policy engine share origin—no cross-site identity theater, no split
+          certificate stories for the live feed.
         </p>
       </section>
 
       <section class="rounded-2xl border border-dms-line2 bg-dms-void/50 p-5 md:p-6">
         <h3 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-dms-dim mb-3">Disclaimer</h3>
         <p class="text-xs text-dms-dim leading-relaxed">
-          Research and demonstration artifact—not certified for ADAS or regulatory driver-monitoring mandates. No warranty of
-          collision avoidance or medical accuracy. Gaze estimation is heuristic and mount-dependent.
+          Research and demonstration artifact—not certified for ADAS, FMVSS, or clinical vigilance. No claim of crash avoidance or medical
+          diagnosis. Gaze and fatigue estimates are heuristics; mount, optics, and population shift eat your lunch.
         </p>
       </section>
 
