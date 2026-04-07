@@ -40,11 +40,12 @@ class SignalFeatures:
 
 class AlertEngine:
     """
-    Builds a compact signal summary, calls Claude when the snapshot changes or every 30s.
-    Falls back to threshold-based alerts if the API is unavailable or returns invalid JSON.
+    Builds a compact signal summary, calls OpenAI Chat Completions when the snapshot
+    changes or every 30s. Falls back to threshold-based alerts if the API is unavailable
+    or returns invalid JSON.
     """
 
-    MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "gpt-4o-mini"
     WINDOW_SHORT_SEC = 8.0
     MAR_YAWN_THRESHOLD = 0.42
     EAR_LOW_THRESHOLD = 0.19
@@ -57,20 +58,23 @@ class AlertEngine:
         self._client: Any = None
         self._client_failed = False
 
+    def _model_name(self) -> str:
+        return os.environ.get("OPENAI_MODEL", self.DEFAULT_MODEL).strip() or self.DEFAULT_MODEL
+
     def _get_client(self) -> Any:
         if self._client_failed:
             return None
         if self._client is not None:
             return self._client
-        key = os.environ.get("ANTHROPIC_API_KEY")
+        key = os.environ.get("OPENAI_API_KEY")
         if not key:
             return None
         try:
-            from anthropic import AsyncAnthropic
+            from openai import AsyncOpenAI
 
-            self._client = AsyncAnthropic(api_key=key)
+            self._client = AsyncOpenAI(api_key=key)
         except Exception as exc:
-            logger.warning("Anthropic client init failed: %s", exc)
+            logger.warning("OpenAI client init failed: %s", exc)
             self._client_failed = True
             self._client = None
             return None
@@ -215,7 +219,7 @@ class AlertEngine:
         context: Optional[DrivingContext],
     ) -> dict[str, Any]:
         """
-        Deterministic severity when Claude is down or returns unusable output.
+        Deterministic severity when OpenAI is down or returns unusable output.
         Aligns with benchmark-style EAR < 0.21 predominance plus MAR/yaw hints.
         """
         sev = "none"
@@ -261,31 +265,31 @@ class AlertEngine:
 
             client = self._get_client()
             if client is None:
-                logger.info("No Anthropic client; using threshold fallback for session %s", session_id)
+                logger.info("No OpenAI client; using threshold fallback for session %s", session_id)
                 self.mark_llm_called(session_id, key)
                 return self.threshold_based_alert(feats, context)
 
             user_content = f"Signal summary:\n{summary}\n\nRespond with JSON only."
             try:
-                msg = await client.messages.create(
-                    model=self.MODEL,
+                resp = await client.chat.completions.create(
+                    model=self._model_name(),
                     max_tokens=256,
-                    system=SYSTEM_PROMPT,
-                    messages=[{"role": "user", "content": user_content}],
+                    temperature=0.3,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
                 )
             except Exception as exc:
-                logger.warning("Claude API error for session %s: %s", session_id, exc)
+                logger.warning("OpenAI API error for session %s: %s", session_id, exc)
                 self.mark_llm_called(session_id, key)
                 return self.threshold_based_alert(feats, context)
 
-            text = ""
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    text += block.text
+            text = (resp.choices[0].message.content or "").strip()
             parsed = self._parse_llm_json(text)
             self.mark_llm_called(session_id, key)
             if not parsed:
-                logger.warning("Claude returned non-JSON for session %s; threshold fallback", session_id)
+                logger.warning("OpenAI returned non-JSON for session %s; threshold fallback", session_id)
                 return self.threshold_based_alert(feats, context)
 
             sev = str(parsed.get("severity", "none")).lower()
