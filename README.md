@@ -81,6 +81,7 @@ Open `http://localhost:8000`, allow the camera. Toggle **Demo mode** to simulate
 ### Reading metrics for your resume
 
 - Open **`benchmark_log.json`**: field **`summary.pct_fewer_alerts_than_baseline`** is the headline **“X% fewer alerts than fixed EAR threshold”** (Claude debounced engine vs. mean EAR < 0.21 for ~1s window).
+- **`summary.avg_seconds_between_claude_alerts`** supports **cadence / escalation spacing** talking points.
 - **`claude_severity_counts`** supports bullets about severity mix.
 - For a honest **false-alert** claim you need **labels** (e.g. NTHU / UTA annotations): match alert timestamps to ground-truth drowsy segments; the notebook comments describe this gap.
 
