@@ -61,10 +61,16 @@
     <header
       class="border-b border-dms-line bg-dms-panel/95 backdrop-blur-md px-4 py-3.5 flex flex-wrap items-center justify-between gap-3"
     >
-      <div>
-        <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-dms-dim mb-0.5">In-cabin monitor</p>
-        <h1 class="text-lg font-semibold tracking-tight text-dms-ink">Driver Monitoring</h1>
-        <p class="text-xs text-dms-muted mt-1 font-mono" id="status">Starting…</p>
+      <div class="flex flex-col sm:flex-row sm:items-end sm:gap-6 gap-2">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-dms-dim mb-0.5">In-cabin monitor</p>
+          <h1 class="text-lg font-semibold tracking-tight text-dms-ink">Driver Monitoring</h1>
+          <p class="text-xs text-dms-muted mt-1 font-mono" id="status">Starting…</p>
+        </div>
+        <nav class="flex items-center gap-4 text-sm font-medium pb-0.5">
+          <a href="/" class="text-dms-jade border-b border-dms-jade/50">Monitor</a>
+          <a href="/about.html" class="text-dms-muted hover:text-dms-ink transition-colors">About</a>
+        </nav>
       </div>
       <label
         class="flex items-center gap-2.5 cursor-pointer select-none text-sm text-dms-muted bg-dms-lift/80 px-3.5 py-2 rounded-lg border border-dms-line hover:border-dms-line2 transition-colors"
@@ -109,6 +115,22 @@
               <div class="min-h-0 relative rounded-lg bg-dms-lift/50 ring-1 ring-dms-line">
                 <canvas id="chart-mar" class="!h-full !w-full"></canvas>
               </div>
+            </div>
+            <div
+              class="mt-4 rounded-xl border border-dms-line2 bg-dms-void/40 px-3.5 py-3 flex flex-wrap items-center justify-between gap-2"
+              aria-live="polite"
+            >
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-dms-dim mb-1">
+                  Attention (iris + head)
+                </p>
+                <p class="text-lg font-semibold text-dms-jade font-mono tracking-tight" id="dms-gaze-region">
+                  —
+                </p>
+              </div>
+              <p class="text-xs text-dms-muted font-mono max-w-[220px] text-right" id="dms-gaze-forward">
+                —
+              </p>
             </div>
           </section>
 
@@ -202,6 +224,7 @@
     </div>
 
     <script src="/js/context.js" defer></script>
+    <script src="/js/attention_ui.js" defer></script>
     <script src="/js/charts.js" defer></script>
     <script src="/js/websocket.js" defer></script>
     <script src="/js/alerts_ui.js" defer></script>

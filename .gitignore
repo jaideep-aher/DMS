@@ -63,3 +63,6 @@ dist/
 
 # Railway / deployment
 *.log
+
+# Local SQLite (DATABASE_URL unset)
+data/

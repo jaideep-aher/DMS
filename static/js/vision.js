@@ -17,6 +17,18 @@
   // PnP: 2D landmark indices matching MODEL_POINTS order
   const PNP_2D_IDX = [1, 152, 33, 263, 61, 291];
 
+  /** Refined mesh: iris centers (first index of each iris pentagon). */
+  const RIGHT_IRIS_CENTER = 468;
+  const LEFT_IRIS_CENTER = 473;
+  const LEFT_EYE_OUTER = 33;
+  const LEFT_EYE_INNER = 133;
+  const LEFT_EYE_TOP = 159;
+  const LEFT_EYE_BOTTOM = 145;
+  const RIGHT_EYE_OUTER = 263;
+  const RIGHT_EYE_INNER = 362;
+  const RIGHT_EYE_TOP = 386;
+  const RIGHT_EYE_BOTTOM = 374;
+
   // 3D face model (mm), nose tip at origin — common OpenCV head-pose tutorial model
   const MODEL_POINTS = [
     [0.0, 0.0, 0.0],
@@ -69,6 +81,82 @@
       outM = Math.max(outM, 0.46);
     }
     return { earL: outL, earR: outR, mar: outM };
+  }
+
+  /**
+   * Map iris position within each eye to ~[-1,1] (horizontal: outer→inner, vertical: top→bottom).
+   */
+  /** Horizontal iris offset vs eye midline; ~[-1,1] when iris stays inside eye opening. */
+  function irisNormH(lm, irisIdx, cornerA, cornerB, w, h) {
+    const ix = lm[irisIdx].x * w;
+    const ax = lm[cornerA].x * w;
+    const bx = lm[cornerB].x * w;
+    const mid = (ax + bx) / 2;
+    const half = Math.abs(bx - ax) / 2;
+    if (half < 1e-4) return 0;
+    return Math.max(-1.2, Math.min(1.2, (ix - mid) / half));
+  }
+
+  function irisNormV(lm, irisIdx, topIdx, botIdx, w, h) {
+    const iy = lm[irisIdx].y * h;
+    const ty = lm[topIdx].y * h;
+    const by = lm[botIdx].y * h;
+    const span = Math.abs(by - ty);
+    if (span < 1e-4) return 0;
+    const t = (iy - ty) / span;
+    return (t - 0.5) * 2;
+  }
+
+  function combineHeadHint(yawDeg, pitchDeg) {
+    const hy = Math.max(-1, Math.min(1, yawDeg / 32));
+    const hp = Math.max(-1, Math.min(1, pitchDeg / 22));
+    return { hy, hp };
+  }
+
+  /**
+   * Coarse attention region for DMS (selfie camera, in-cabin).
+   */
+  function classifyGazeRegion(gn, gp, yaw, pitch, hasIris) {
+    const { hy, hp } = combineHeadHint(yaw, pitch);
+    const cx = hasIris ? gn * 0.62 + hy * 0.38 : hy;
+    const cy = hasIris ? gp * 0.62 + hp * 0.38 : hp;
+
+    if (cy > 0.4) return "down";
+    if (cy < -0.36) return "up";
+    if (cx < -0.38) return "left";
+    if (cx > 0.38) return "right";
+    if (Math.abs(cx) > 0.26 || Math.abs(cy) > 0.28) return "away";
+    return "forward";
+  }
+
+  function computeGaze(lm, w, h, yaw, pitch) {
+    const n = lm.length;
+    const hasIris = n > RIGHT_IRIS_CENTER && n > LEFT_IRIS_CENTER;
+    let gn = 0;
+    let gp = 0;
+    if (hasIris) {
+      const hL = irisNormH(lm, LEFT_IRIS_CENTER, LEFT_EYE_OUTER, LEFT_EYE_INNER, w, h);
+      const hR = irisNormH(lm, RIGHT_IRIS_CENTER, RIGHT_EYE_OUTER, RIGHT_EYE_INNER, w, h);
+      const vL = irisNormV(lm, LEFT_IRIS_CENTER, LEFT_EYE_TOP, LEFT_EYE_BOTTOM, w, h);
+      const vR = irisNormV(lm, RIGHT_IRIS_CENTER, RIGHT_EYE_TOP, RIGHT_EYE_BOTTOM, w, h);
+      gn = (hL + hR) / 2;
+      gp = (vL + vR) / 2;
+    }
+    const region = classifyGazeRegion(gn, gp, yaw, pitch, hasIris);
+    return { gaze_yaw_norm: gn, gaze_pitch_norm: gp, gaze_region: region };
+  }
+
+  function applyDemoGaze(gaze) {
+    if (!isDemoMode() || demoT0 === null) return gaze;
+    const elapsed = (performance.now() - demoT0) / 1000;
+    const phase = elapsed % 28;
+    if (phase > 11 && phase < 15) {
+      return { gaze_yaw_norm: 0.05, gaze_pitch_norm: 0.75, gaze_region: "down" };
+    }
+    if (phase > 19 && phase < 22) {
+      return { gaze_yaw_norm: -0.68, gaze_pitch_norm: 0.02, gaze_region: "left" };
+    }
+    return gaze;
   }
 
   let ctx = null;
@@ -269,6 +357,8 @@
       const outL = dm.earL;
       const outR = dm.earR;
       const outM = dm.mar;
+      const gazeRaw = computeGaze(lm, w, h, pose.yaw, pose.pitch);
+      const gaze = applyDemoGaze(gazeRaw);
 
       const ts =
         typeof performance !== "undefined" && performance.now
@@ -282,6 +372,9 @@
         yaw: pose.yaw,
         pitch: pose.pitch,
         roll: pose.roll,
+        gaze_yaw_norm: gaze.gaze_yaw_norm,
+        gaze_pitch_norm: gaze.gaze_pitch_norm,
+        gaze_region: gaze.gaze_region,
         timestamp: ts,
       });
 
@@ -289,9 +382,10 @@
         `EAR L: ${outL.toFixed(3)}  R: ${outR.toFixed(3)}${isDemoMode() ? " (demo)" : ""}`,
         `MAR: ${outM.toFixed(3)}`,
         `Yaw: ${pose.yaw.toFixed(1)}°  Pitch: ${pose.pitch.toFixed(1)}°  Roll: ${pose.roll.toFixed(1)}°`,
+        `Attention: ${gaze.gaze_region}  (gaze y ${gaze.gaze_yaw_norm.toFixed(2)} p ${gaze.gaze_pitch_norm.toFixed(2)})`,
       ];
       ctx.fillStyle = "rgba(12, 14, 17, 0.82)";
-      ctx.fillRect(8, 8, 420, 72);
+      ctx.fillRect(8, 8, 520, 92);
       ctx.fillStyle = "#e8eaef";
       ctx.font = "500 13px 'DM Sans', system-ui, sans-serif";
       lines.forEach((line, i) => ctx.fillText(line, 16, 28 + i * 20));

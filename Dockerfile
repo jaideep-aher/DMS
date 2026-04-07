@@ -9,7 +9,7 @@ COPY server ./server
 COPY static ./static
 
 ENV PYTHONUNBUFFERED=1
-# Set in Railway: OPENAI_API_KEY (OpenAI API for driver safety reasoning)
+# Railway: OPENAI_API_KEY, DATABASE_URL (Postgres plugin reference)
 # Optional: OPENAI_MODEL=gpt-4o-mini (default)
 ENV OPENAI_API_KEY=
 ENV OPENAI_MODEL=gpt-4o-mini

@@ -3,7 +3,7 @@ from __future__ import annotations
 """Rolling in-memory store of per-session metric samples (server receive time)."""
 
 import time
-from collections import deque
+from collections import Counter, deque
 
 from server.models import BufferSummary, MetricSample
 
@@ -45,6 +45,16 @@ class RollingSignalBuffer:
         roll = sum(x.roll for x in samples) / n
         latest_ts = samples[-1].timestamp
 
+        gy_vals = [x.gaze_yaw_norm for x in samples if x.gaze_yaw_norm is not None]
+        gp_vals = [x.gaze_pitch_norm for x in samples if x.gaze_pitch_norm is not None]
+        regions = [x.gaze_region for x in samples if x.gaze_region]
+        gaze_region_mode = None
+        gaze_forward_frac = None
+        if regions:
+            c = Counter(regions)
+            gaze_region_mode = c.most_common(1)[0][0]
+            gaze_forward_frac = sum(1 for r in regions if r == "forward") / len(regions)
+
         return BufferSummary(
             session_id=session_id,
             count=n,
@@ -55,4 +65,8 @@ class RollingSignalBuffer:
             pitch_avg=pitch,
             roll_avg=roll,
             latest_timestamp=latest_ts,
+            gaze_region_mode=gaze_region_mode,
+            gaze_forward_frac=gaze_forward_frac,
+            gaze_yaw_avg=sum(gy_vals) / len(gy_vals) if gy_vals else None,
+            gaze_pitch_avg=sum(gp_vals) / len(gp_vals) if gp_vals else None,
         )

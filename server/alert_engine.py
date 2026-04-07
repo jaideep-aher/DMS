@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -15,7 +16,7 @@ from server.models import DrivingContext, MetricSample
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a driver safety co-pilot. Given physiological signals and driving context, assess drowsiness severity (none/mild/moderate/severe) and produce a short natural spoken alert. Be specific — reference time driving, road type, suggest concrete actions like 'pull over at next exit' or 'open your window'. Respond ONLY as JSON: {severity, alert_text, reasoning}"""
+SYSTEM_PROMPT = """You are a driver safety co-pilot. Given physiological signals, gaze/attention hints, and driving context, assess drowsiness severity (none/mild/moderate/severe) and produce a short natural spoken alert. Consider both fatigue (eyes closing, yawning) and visual distraction (gaze off the forward road). Be specific — reference time driving, road type, suggest concrete actions like 'pull over at next exit' or 'open your window'. Respond ONLY as JSON: {severity, alert_text, reasoning}"""
 
 
 @dataclass
@@ -174,6 +175,10 @@ class AlertEngine:
                 f"{feats.fraction_ear_below_drowsy:.0%} of recent samples"
             )
 
+        gaze_line = self._gaze_summary_line(buffer)
+        if gaze_line:
+            parts.append(gaze_line)
+
         if context:
             mins = max(0, context.session_elapsed_sec) // 60
             parts.append(
@@ -184,6 +189,27 @@ class AlertEngine:
             parts.append("driving context not provided")
 
         return ", ".join(parts)
+
+    def _gaze_summary_line(self, buffer: RollingSignalBuffer) -> Optional[str]:
+        recent = buffer.recent(self.WINDOW_SHORT_SEC)
+        if not recent:
+            return None
+        samples = [s for s, _ in recent]
+        tagged = [s for s in samples if s.gaze_region]
+        if len(tagged) < max(3, len(samples) // 4):
+            return None
+        fwd = sum(1 for s in tagged if s.gaze_region == "forward")
+        frac = fwd / len(tagged)
+        mode = Counter(s.gaze_region for s in tagged if s.gaze_region).most_common(1)[0][0]
+        gn = [s.gaze_yaw_norm for s in tagged if s.gaze_yaw_norm is not None]
+        gp = [s.gaze_pitch_norm for s in tagged if s.gaze_pitch_norm is not None]
+        extra = ""
+        if gn and gp:
+            extra = f", iris-offset avg yaw {sum(gn)/len(gn):.2f} pitch {sum(gp)/len(gp):.2f}"
+        return (
+            f"Attention: {frac:.0%} forward in recent window, "
+            f"most common region '{mode}'{extra}"
+        )
 
     def _count_yawn_events(self, mar_series: list[float]) -> int:
         """Rough count of distinct high-MAR excursions (proxy for yawns)."""

@@ -21,7 +21,7 @@ Web app: **browser** MediaPipe Face Mesh → **EAR / MAR / head pose** → **Web
 │  RAILWAY / FastAPI (Python 3.11)                                         │
 │  ┌──────────────────┐   rolling buffer   ┌───────────────────────────┐  │
 │  │ /ws/metrics      │ ─────────────────► │ AlertEngine               │  │
-│  │ + session memory │                    │ summary → OpenAI API      │  │
+│  │ + PostgreSQL     │                    │ summary → OpenAI API      │  │
 │  └────────┬─────────┘                    │ or threshold fallback     │  │
 │           │                               └───────────┬───────────────┘  │
 │           │  {type: alert, v:1}                       │                  │
@@ -30,7 +30,7 @@ Web app: **browser** MediaPipe Face Mesh → **EAR / MAR / head pose** → **Web
 │  │ AlertManager     │◄───────────────────│ OpenAI Chat Completions   │  │
 │  │ cooldown + log   │   (HTTP outbound)    │ default: gpt-4o-mini      │  │
 │  └──────────────────┘                    └───────────────────────────┘  │
-│  GET /api/status   GET /api/alerts   Static SPA (Tailwind + Chart.js)     │
+│  GET /api/trips … /api/alerts … /api/status   Static SPA (Tailwind + Chart.js) │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -42,23 +42,25 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 export OPENAI_API_KEY="sk-..."   # optional; threshold fallback works without it
 # optional: export OPENAI_MODEL="gpt-4o"   # default is gpt-4o-mini
+# optional: unset DATABASE_URL → SQLite file at ./data/dms.db (created automatically)
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 Open `http://localhost:8000`, allow the camera. Toggle **Demo mode** to simulate dropping EAR and yawns without being tired.
 
-## Railway deployment checklist (≤10 steps)
+## Railway deployment checklist
 
 1. Sign in at [railway.app](https://railway.app) and click **New Project**.
 2. Choose **Deploy from GitHub** and authorize the Railway GitHub app if prompted.
 3. Select the **DMS** repository and branch **`main`**.
 4. Railway should detect the **Dockerfile** (see `railway.json`); confirm build type is **Docker** under service **Settings → Build**.
 5. Open **Settings → Networking** and click **Generate Domain** (HTTPS required for camera on most browsers).
-6. Under **Variables**, add **`OPENAI_API_KEY`** with your OpenAI API key. Optional: **`OPENAI_MODEL`** (e.g. `gpt-4o-mini`, `gpt-4o`). Leave the key blank only if you accept threshold-only alerts.
-7. Trigger a **Deploy** (or push to `main`); wait until the deployment shows **Success**.
-8. Open the public URL, grant **camera** permission, confirm the dashboard loads and the status line shows the pipeline running.
-9. Optionally open browser devtools → **Network** → confirm **WebSocket** to `/ws/metrics` is **101** and messages flow.
-10. Optional: call `GET https://<your-domain>/api/status` and `GET /api/alerts?session_id=<id from hello message>` while a tab is connected.
+6. Add a **PostgreSQL** database (New → Database → PostgreSQL). In your **web service** variables, add **`DATABASE_URL`** and paste the variable reference from the Postgres service (Railway injects `postgres://` or `postgresql://`; the app normalizes it for async SQLAlchemy). Without Postgres, the container would use ephemeral SQLite inside the image — trips and alerts would not survive redeploys.
+7. Under **Variables**, add **`OPENAI_API_KEY`** with your OpenAI API key. Optional: **`OPENAI_MODEL`** (e.g. `gpt-4o-mini`, `gpt-4o`). Leave the key blank only if you accept threshold-only alerts.
+8. Trigger a **Deploy** (or push to `main`); wait until the deployment shows **Success**.
+9. Open the public URL, grant **camera** permission, confirm the dashboard loads and the status line shows the pipeline running.
+10. Optionally open browser devtools → **Network** → confirm **WebSocket** to `/ws/metrics` is **101** and messages flow.
+11. Optional: `GET /api/trips` after a session; `GET /api/alerts?session_id=<id from hello>` (or `trip_id=`) loads persisted alerts from the database.
 
 ## Colab benchmark (`benchmark.ipynb`)
 
@@ -96,9 +98,12 @@ Open `http://localhost:8000`, allow the camera. Toggle **Demo mode** to simulate
 
 ```
 server/
-  main.py           # FastAPI, WebSocket, static mount
+  main.py           # FastAPI, WebSocket, static mount, trip lifecycle
+  database.py       # Async engine: DATABASE_URL (Postgres) or SQLite
+  sql_models.py     # Trip + Alert ORM
+  crud.py           # Trips and alert log persistence
   alert_engine.py   # Signal features, OpenAI, threshold fallback
-  alert_manager.py  # Cooldown + alert history
+  alert_manager.py  # Cooldown + in-session state
   buffer.py         # Rolling buffer with server timestamps
   models.py         # Pydantic schemas
 static/
@@ -111,9 +116,11 @@ benchmark.ipynb     # Colab: video → metrics → OpenAI vs baseline
 
 | Endpoint | Purpose |
 |----------|---------|
-| `WS /ws/metrics` | Client sends `{type:"metrics_batch",v:1,samples:[...],context?:{...}}`; server sends `hello`, then `{type:"alert",v:1,...}`. |
-| `GET /api/status?session_id=` | Rolling buffer summary. |
-| `GET /api/alerts?session_id=` | Alert history for the active session. |
+| `WS /ws/metrics` | Client sends `{type:"metrics_batch",v:1,samples:[...],context?:{...}}`; server sends `hello` with `session_id` / `trip_id`, then `{type:"alert",v:1,...}` (optional `id` = DB row). |
+| `GET /api/status?session_id=` | Rolling buffer summary for an active WebSocket. |
+| `GET /api/alerts?session_id=` or `?trip_id=` | Alert log for that trip from the database. |
+| `GET /api/trips` | Recent trips (`limit`, `offset`). |
+| `GET /api/trips/{trip_id}` | One trip: start/end, distance, route JSON, alert count. |
 
 ## License
 

@@ -37,7 +37,7 @@
     }
   }
 
-  function appendHistory(severity, text, ts) {
+  function appendHistory(severity, text, ts, category) {
     if (!historyEl) return;
     const li = document.createElement("li");
     li.className =
@@ -55,8 +55,14 @@
         none: "text-dms-dim",
       }[severity] || "text-dms-muted";
 
+    const cat = category === "distraction" ? "visual" : "fatigue";
+    const catClass =
+      cat === "visual" ? "text-[#81a8c4]" : "text-dms-dim";
+
     li.innerHTML = `<div class="flex flex-wrap items-baseline gap-2 mb-1"><span class="font-semibold uppercase tracking-[0.12em] text-[10px] ${sevClass}">${escapeHtml(
       severity
+    )}</span><span class="font-medium uppercase tracking-[0.1em] text-[9px] ${catClass}">${escapeHtml(
+      cat
     )}</span><span class="text-dms-dim font-mono text-[10px]">${escapeHtml(t)}</span></div><p class="text-dms-ink/90 leading-snug">${escapeHtml(
       text
     )}</p>`;
@@ -64,6 +70,11 @@
     while (historyEl.children.length > 40) {
       historyEl.removeChild(historyEl.lastChild);
     }
+  }
+
+  function categoryFromReasoning(reasoning) {
+    const r = (reasoning && String(reasoning)) || "";
+    return r.toLowerCase().startsWith("distraction") ? "distraction" : "fatigue";
   }
 
   function escapeHtml(s) {
@@ -97,7 +108,7 @@
         .slice()
         .reverse()
         .forEach((a) => {
-          appendHistory(a.severity, a.alert_text, a.timestamp);
+          appendHistory(a.severity, a.alert_text, a.timestamp, categoryFromReasoning(a.reasoning));
         });
     } catch {
       /* ignore */
@@ -117,7 +128,7 @@
     if (msg.type === "alert" && msg.v === 1) {
       const sev = msg.severity || "mild";
       setSeverityUI(sev, msg.alert_text || "");
-      appendHistory(sev, msg.alert_text || "", msg.timestamp);
+      appendHistory(sev, msg.alert_text || "", msg.timestamp, msg.category);
       if (sev === "moderate" || sev === "severe") {
         speak(msg.alert_text || "");
       }
